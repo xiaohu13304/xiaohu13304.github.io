@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="format-detection" content="telephone=no,email=no,address=no">
+<meta name="theme-color" content="#04060f">
+<title>流星雨 · 许个愿吧</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#04060f;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif}
+  #sky{position:fixed;inset:0;display:block;width:100%;height:100%}
+  .title{position:fixed;left:0;right:0;top:calc(10vh + env(safe-area-inset-top));text-align:center;
+    color:#fff;font-size:22px;font-weight:300;letter-spacing:.36em;text-indent:.36em;
+    text-shadow:0 0 26px rgba(150,200,255,.8);pointer-events:none;opacity:0;
+    animation:fadeIn 2.4s ease .6s forwards}
+  .title small{display:block;margin-top:14px;font-size:10px;letter-spacing:.34em;text-indent:.34em;
+    color:rgba(255,255,255,.42);font-weight:300}
+  .hint{position:fixed;left:0;right:0;bottom:calc(7vh + env(safe-area-inset-bottom));text-align:center;
+    color:rgba(255,255,255,.7);font-size:14px;letter-spacing:.2em;text-indent:.2em;pointer-events:none;
+    text-shadow:0 0 18px rgba(140,190,255,.55);animation:breathe 3.4s ease-in-out infinite}
+  .wish{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.85);color:#fff;
+    font-size:17px;letter-spacing:.18em;text-indent:.18em;white-space:nowrap;opacity:0;pointer-events:none;
+    text-shadow:0 0 26px rgba(190,225,255,.95);transition:opacity .55s ease,transform .55s ease}
+  .wish.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  @keyframes breathe{0%,100%{opacity:.32}50%{opacity:.92}}
+  @keyframes fadeIn{to{opacity:1}}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="title">流星雨<small>ORIONIDS · 许 个 愿 吧</small></div>
+<div class="hint">轻触屏幕 · 唤来流星</div>
+<div class="wish" id="wish"></div>
+<script>
+(function(){
+  "use strict";
+  var canvas=document.getElementById("sky"),ctx=canvas.getContext("2d"),wishEl=document.getElementById("wish");
+  var W=0,H=0,DPR=1,TAU=Math.PI*2;
+  var stars=[],meteors=[];
+  var bg=document.createElement("canvas"),bgx=bg.getContext("2d");
+
+  function rand(a,b){return a+Math.random()*(b-a);}
+
+  function buildBackground(){
+    bg.width=Math.round(W*DPR);bg.height=Math.round(H*DPR);
+    bgx.setTransform(DPR,0,0,DPR,0,0);
+    var g=bgx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,"#050813");g.addColorStop(.45,"#0a1026");
+    g.addColorStop(.75,"#070b1a");g.addColorStop(1,"#03040a");
+    bgx.fillStyle=g;bgx.fillRect(0,0,W,H);
+    var blobs=[
+      {x:W*.78,y:H*.18,r:Math.max(W,H)*.60,c:"rgba(58,86,180,.20)"},
+      {x:W*.14,y:H*.74,r:Math.max(W,H)*.52,c:"rgba(96,58,160,.16)"},
+      {x:W*.50,y:H*.04,r:Math.max(W,H)*.44,c:"rgba(40,120,170,.13)"}
+    ];
+    for(var i=0;i<blobs.length;i++){
+      var b=blobs[i],rg=bgx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+      rg.addColorStop(0,b.c);rg.addColorStop(1,"rgba(0,0,0,0)");
+      bgx.fillStyle=rg;bgx.fillRect(0,0,W,H);
+    }
+  }
+
+  function buildStars(){
+    stars.length=0;
+    var n=Math.round(W*H/6200);
+    for(var i=0;i<n;i++){
+      stars.push({x:Math.random()*W,y:Math.random()*H,r:rand(.25,1.45),
+        a:rand(.22,.85),tw:Math.random()*TAU,sp:rand(.35,1.3)});
+    }
+  }
+
+  function resize(){
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=window.innerWidth;H=window.innerHeight;
+    canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);
+    canvas.style.width=W+"px";canvas.style.height=H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildBackground();buildStars();
+  }
+
+  function spawnMeteor(o){
+    o=o||{};
+    var ang=rand(17,37)*Math.PI/180;
+    var speed=rand(620,1080);
+    var vx=-Math.cos(ang)*speed,vy=Math.sin(ang)*speed,x,y;
+    if(o.x!==undefined){x=o.x;y=o.y;}
+    else if(Math.random()<.62){x=rand(-.10,1.15)*W;y=rand(-.28,.12)*H;}
+    else{x=rand(.55,1.22)*W;y=rand(-.22,.26)*H;}
+    meteors.push({x:x,y:y,vx:vx,vy:vy,len:rand(150,360),w:rand(1.0,2.5),
+      life:0,max:rand(1.1,2.3),alpha:rand(.72,1),hue:rand(188,228)});
+  }
+
+  function updateMeteors(dt){
+    for(var i=meteors.length-1;i>=0;i--){
+      var m=meteors[i];m.life+=dt;m.x+=m.vx*dt;m.y+=m.vy*dt;
+      if(m.life>m.max||m.x<-420||m.y>H+420)meteors.splice(i,1);
+    }
+  }
+
+  function drawStars(t){
+    for(var i=0;i<stars.length;i++){
+      var s=stars[i],tw=.55+.45*Math.sin(t*s.sp+s.tw),a=s.a*tw;
+      ctx.globalAlpha=a;ctx.fillStyle="#dbe9ff";
+      ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,TAU);ctx.fill();
+      if(s.r>1.05){
+        ctx.globalAlpha=a*.22;ctx.fillStyle="#9cc4ff";
+        ctx.beginPath();ctx.arc(s.x,s.y,s.r*4.2,0,TAU);ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawMeteors(){
+    for(var i=0;i<meteors.length;i++){
+      var m=meteors[i],k=m.life/m.max,a=m.alpha;
+      if(k<.12)a*=k/.12;else if(k>.70)a*=(1-k)/.30;
+      if(a<=0)continue;
+      var sp=Math.hypot(m.vx,m.vy)||1,ux=m.vx/sp,uy=m.vy/sp;
+      var tx=m.x-ux*m.len,ty=m.y-uy*m.len;
+      var g=ctx.createLinearGradient(m.x,m.y,tx,ty);
+      g.addColorStop(0,"hsla("+m.hue+",100%,93%,"+a+")");
+      g.addColorStop(.26,"hsla("+m.hue+",95%,78%,"+(a*.55)+")");
+      g.addColorStop(1,"hsla("+m.hue+",90%,70%,0)");
+      ctx.strokeStyle=g;ctx.lineWidth=m.w;ctx.lineCap="round";
+      ctx.beginPath();ctx.moveTo(m.x,m.y);ctx.lineTo(tx,ty);ctx.stroke();
+      var gg=ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,m.w*7.5);
+      gg.addColorStop(0,"hsla("+m.hue+",100%,97%,"+a+")");
+      gg.addColorStop(.42,"hsla("+m.hue+",100%,80%,"+(a*.35)+")");
+      gg.addColorStop(1,"hsla("+m.hue+",100%,70%,0)");
+      ctx.fillStyle=gg;ctx.beginPath();ctx.arc(m.x,m.y,m.w*7.5,0,TAU);ctx.fill();
+    }
+  }
+
+  var wishes=["愿望会实现哦 ✨","愿你所求皆如愿","好运正在赶来","要一直开心呀",
+    "愿你被温柔以待","万事胜意","所念皆星河","夜夜都好梦","想见的人就在身边"];
+  var wishTimer=null;
+  function tapAt(x,y){
+    var n=Math.round(rand(5,9));
+    for(var i=0;i<n;i++){
+      (function(i){
+        setTimeout(function(){
+          spawnMeteor({x:x+rand(10,140),y:y-rand(30,170)});
+        },i*75);
+      })(i);
+    }
+    wishEl.textContent=wishes[Math.floor(Math.random()*wishes.length)];
+    wishEl.classList.add("show");
+    clearTimeout(wishTimer);
+    wishTimer=setTimeout(function(){wishEl.classList.remove("show");},1700);
+  }
+
+  canvas.addEventListener("touchstart",function(e){
+    var t=e.changedTouches[0];tapAt(t.clientX,t.clientY);
+  },{passive:true});
+  canvas.addEventListener("mousedown",function(e){tapAt(e.clientX,e.clientY);});
+
+  var last=0,acc=0,next=rand(.3,.9);
+  function loop(ts){
+    if(!last)last=ts;
+    var dt=(ts-last)/1000;last=ts;
+    if(dt>.05)dt=.05;
+
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(bg,0,0,W,H);
+    drawStars(ts/1000);
+    updateMeteors(dt);
+    drawMeteors();
+
+    acc+=dt;
+    if(acc>=next){
+      acc=0;next=rand(.42,1.55);
+      spawnMeteor();
+      if(Math.random()<.20)setTimeout(function(){spawnMeteor();},130);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize",resize);
+  window.addEventListener("orientationchange",function(){setTimeout(resize,220);});
+  resize();
+  spawnMeteor();spawnMeteor();spawnMeteor();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
